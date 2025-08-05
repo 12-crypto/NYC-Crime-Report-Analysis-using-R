@@ -1,6 +1,8 @@
 # NYC Crime Trend Analysis 
 
 A comprehensive statistical computing project analyzing NYC crime complaint data using exploratory data analysis and machine learning techniques to predict crime patterns across NYC boroughs.
+<img width="242" height="213" alt="image" src="https://github.com/user-attachments/assets/6303b253-d9b1-4321-b1f3-44cc73ff95d9" />
+
 
 ## Dataset Overview
 
