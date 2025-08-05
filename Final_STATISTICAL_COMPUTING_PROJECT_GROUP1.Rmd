@@ -1,0 +1,823 @@
+---
+title: "AMS 597 - Statistical Computing"
+author: "GROUP1: Varsha, Swati, Dhruv, Kabir, Iftekhar"
+date: "2025-04-11"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+
+# Load libraries for data manipulation, visualization, modeling, and evaluation
+
+library(tidyverse,quietly = T) 
+library(RColorBrewer,quietly = T) 
+library(dlookr,quietly = T) 
+library(ggcorrplot,quietly = T) 
+library(plyr,quietly = T) 
+library(dplyr,quietly = T) 
+library(cowplot,quietly = T)
+library(ggplot2,quietly = T)
+library(gridExtra,quietly = T)
+library(readr,quietly = T) 
+library(lattice,quietly = T)
+library(magrittr,quietly = T)
+library(ggmap,quietly = T)
+library(hexbin)
+library(viridis)
+library(ggthemes)
+library(rsample,quietly = T) 
+library(rpart,quietly = T) 
+library(nnet,quietly = T) 
+library(caret,quietly = T) 
+library(party,quietly = T) 
+library(pROC,quietly = T) 
+library(ROCR,quietly = T) 
+library(randomForest,quietly = T)
+library(class,quietly = T)
+library(SimDesign,quietly = T)
+library(rpart.plot,quietly = T)
+library(e1071,quietly = T)
+#install.packages("corrplot")
+library(corrplot)
+```
+
+
+# PHASE 1
+
+EXPLORATORY DATA ANALYSIS
+
+
+```{r}
+# Load NYC crime dataset from CSV file into a data frame
+nycCrimeData = read.csv("/Users/swati/Downloads/Project_nycCRIME/NYPD_Complaint_Data_Current_YTD.csv")
+#head(nycCrimeData)
+
+```
+
+```{r}
+# Get the current working directory
+
+getwd()
+# Get the dimensions of the NYC crime dataset (number of rows and columns)
+
+dim(nycCrimeData)
+
+# Get the column names of the NYC crime dataset
+colnames(nycCrimeData)
+```
+
+```{r}
+#glimpse(nycCrimeData)
+summary(nycCrimeData)
+table(nycCrimeData$BORO_NM)
+
+#boro_table = table(nycCrimeData$BORO_NM)
+#length(boro_table)
+```
+
+```{r}
+# Create a bar plot to visualize the distribution of crime complaints across boroughs
+
+ggplot(nycCrimeData, aes(x = BORO_NM,fill = BORO_NM)) + geom_bar() + ggtitle("Crime Complaints in each Boroughs") + theme_bw() + theme(plot.title = element_text(hjust = 0.5)) + geom_text(aes(label = ..count..), stat = "count", vjust=-0.25) 
+```
+
+
+```{r}
+# Create a frequency table for the offense categories (LAW_CAT_CD)
+
+table(nycCrimeData$LAW_CAT_CD)
+
+# Create a bar plot to visualize the distribution of offense categories
+
+ggplot(nycCrimeData, aes(x = LAW_CAT_CD,fill = LAW_CAT_CD)) + geom_bar() + ggtitle("Offence Categories ") + theme_bw() + theme(plot.title = element_text(hjust = 0.5)) + geom_text(aes(label = ..count..), stat = "count", vjust=-0.25) 
+```
+
+```{r}
+
+# Create a stacked bar chart to visualize the distribution of offense categories by borough
+
+ggplot(nycCrimeData, aes(x = LAW_CAT_CD,fill = BORO_NM)) + geom_bar() + ggtitle("Offense Categories") +geom_bar(stat = "count") + theme_minimal() +labs(x = "Level of offense",y= " Count",title = "Stacked Bar Chart rep. of offense categories by each borough")
+
+```
+
+```{r}
+
+#table(nycCrimeData$OFNS_DESC)
+
+#length(unique(nycCrimeData$OFNS_DESC))
+
+#length(unique(nycCrimeData$OFNS_DESC))
+
+```
+
+
+
+```{r}
+
+# Create a funnel chart to visualize the most frequent crime descriptions with a frequency greater than 659
+
+frequencies <- data.frame(table(nycCrimeData$OFNS_DESC))
+names(frequencies)[1] <- "Crime"
+frequencies <- frequencies[order(-frequencies$Freq),]
+
+hifreq <- frequencies[which(frequencies$Freq > 659),]
+
+hifreq$OrderedCrime <- reorder(hifreq$Crime, hifreq$Freq)
+
+ofns.freqbp <- ggplot(hifreq, aes(x=OrderedCrime, y=Freq, fill=Freq)) +
+
+  geom_bar(width=1, stat="identity") + ggtitle("Funnel Chart Offense Description Tags by Frequency") +
+
+  coord_flip()
+
+ofns.freqbp
+
+```
+
+```{r}
+# Analyze the frequency of police department descriptions for "DANGEROUS DRUGS" offense type
+
+#length(unique(nycCrimeData$PD_DESC))
+
+#head(nycCrimeData$PD_DESC)
+
+drugs <- nycCrimeData[which(nycCrimeData$OFNS_DESC == "DANGEROUS DRUGS"),] 
+drugs.pd.summary <- data.frame(table(drugs$PD_DESC))
+names(drugs.pd.summary)[1] <- "PD_DESC"
+drugs.pd.summary <- drugs.pd.summary[which(drugs.pd.summary$Freq > 0),]
+drugs.pd.summary <- drugs.pd.summary[order(-drugs.pd.summary$Freq),]
+drugs.pd.summary
+
+```
+
+```{r}
+
+# Filter the data for specific drug-related incidents (e.g., marijuana or alcohol), 
+# calculate the total frequency for the selected category, and compute its proportion 
+# relative to the total frequency of all drug-related incidents.
+
+marijuana.pd <- drugs.pd.summary[grepl("MARIJUANA", drugs.pd.summary[,"PD_DESC"]),]
+marijuana.sum <-  sum(marijuana.pd[,"Freq"])
+drugs.sum <- sum(drugs.pd.summary[,"Freq"])
+marijuana.sum / drugs.sum
+
+marijuana.pd <- drugs.pd.summary[grepl("ALCOHOL", drugs.pd.summary[,"PD_DESC"]),]
+marijuana.sum <-  sum(marijuana.pd[,"Freq"])
+drugs.sum <- sum(drugs.pd.summary[,"Freq"])
+marijuana.sum / drugs.sum
+
+```
+
+
+```{r}
+
+# Filter the unique descriptions of 'PD_DESC' for crimes categorized under "MISCELLANEOUS PENAL LAW"
+
+# Combine complaint date and time into a single datetime object for start and end times
+# Create additional time-based features like hour, day of month, month, and day of week for further analysis
+
+# Remove unnecessary columns from the dataset for a cleaner dataset
+
+unique(nycCrimeData[which(nycCrimeData$OFNS_DESC == "MISCELLANEOUS PENAL LAW"),'PD_DESC'])
+
+nycCrimeData$start <- as.POSIXlt(strptime(paste(nycCrimeData$CMPLNT_FR_DT,nycCrimeData$CMPLNT_FR_TM), "%m/%d/%Y %H:%M:%S"))
+nycCrimeData$end <- as.POSIXlt(strptime(paste(nycCrimeData$CMPLNT_TO_DT,nycCrimeData$CMPLNT_TO_TM), "%m/%d/%Y %H:%M:%S"))
+nycCrimeData$shr <-  as.factor(substr(nycCrimeData$start, 12, 13))
+nycCrimeData$ehr <- as.factor(substr(nycCrimeData$end, 12, 13))
+nycCrimeData$sdom <- as.factor(substr(nycCrimeData$start, 9, 10))
+nycCrimeData$edom <- as.factor(substr(nycCrimeData$end, 9, 10))
+nycCrimeData$mon <- as.factor(substr(nycCrimeData$start, 6, 7))
+nycCrimeData$dow <- nycCrimeData$start$wday
+nycCrimeData <- nycCrimeData[,c(-25,-26)]
+#head(nycCrimeData)
+
+```
+```{r}
+#---------------------------------------------------------------
+# Convert Date and Time Columns into POSIXct Objects
+#---------------------------------------------------------------
+nycCrimeData$start <- as.POSIXct(
+  strptime(paste(nycCrimeData$CMPLNT_FR_DT, nycCrimeData$CMPLNT_FR_TM), 
+           "%m/%d/%Y %H:%M:%S")
+)
+# Extract the date and hour
+nycCrimeData$day <- as.Date(nycCrimeData$start)
+nycCrimeData$Hour <- as.factor(format(nycCrimeData$start, "%H"))
+# Get day of week (0 = Sunday, ... 6 = Saturday)
+nycCrimeData$dow <- as.POSIXlt(nycCrimeData$start)$wday
+nycCrimeData$DayOfWeek <- factor(nycCrimeData$dow, levels = 0:6,
+                                 labels = c("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"))
+
+
+```
+
+
+
+```{r}
+#---------------------------------------------------------------
+# Heatmap of Crime Counts by Day of Week and Hour
+#---------------------------------------------------------------
+heat_data <- nycCrimeData %>% 
+  group_by(DayOfWeek, Hour) %>% 
+  dplyr::summarise(CrimeCount = n())
+
+p_heat <- ggplot(heat_data, aes(x = Hour, y = DayOfWeek, fill = CrimeCount)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "red") +
+  labs(title = "Heatmap: Crime Counts by Day of Week & Hour", x = "Hour of Day", y = "Day of Week") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"))
+print(p_heat)
+```
+
+
+
+
+```{r}
+# Create a bar plot showing the number of crime records for each month.
+# This helps identify seasonal trends or monthly patterns in crime occurrences.
+# Crime records starting in each month
+
+mon.bp <- ggplot(nycCrimeData, aes(x = mon, fill=as.factor(mon))) +
+
+  geom_bar(width=0.8, stat="count") + theme(legend.position="none") +
+
+  ggtitle("Bar Graph: Crime Records by Month of Year")
+
+mon.bp
+
+```
+
+
+```{r}
+
+#count(nycCrimeData)
+# Check the number of unique complaint records based on the complaint number.
+# This helps ensure there are no duplicate crime reports.
+n_distinct(nycCrimeData$CMPLNT_NUM)
+
+
+# Create a bar plot to show the distribution of crimes based on whether they were
+# completed or attempted. The bars are colored using a pastel palette, and counts
+# are displayed above each bar for clarity.
+ggplot(nycCrimeData, aes(x = CRM_ATPT_CPTD_CD,fill = CRM_ATPT_CPTD_CD )) + geom_bar(show.legend = FALSE) + ggtitle("Distribution of Completion of Crime") + theme_bw() + theme(plot.title = element_text(hjust = 0.5)) + geom_text(aes(label = ..count..), stat = "count", vjust=-0.25) + scale_fill_brewer(palette="Pastel1")
+```
+
+
+
+```{r}
+
+length(which(is.na(nycCrimeData$Latitude))) / length(nycCrimeData$Latitude)
+
+# Perform a Chi-squared test (with simulated p-value) to assess the association 
+# between boroughs and law categories of crimes.
+
+c_test_2 <- chisq.test(table(nycCrimeData$BORO_NM, nycCrimeData$LAW_CAT_CD), simulate.p.value = TRUE)
+c_test_2
+
+# Perform a Chi-squared test (with simulated p-value) to check for association 
+# between boroughs and the described locations where crimes occurred.
+c_test_3 <- chisq.test(table(nycCrimeData$BORO_NM, nycCrimeData$LOC_OF_OCCUR_DESC), simulate.p.value = TRUE)
+c_test_3
+
+
+```
+
+
+```{r}
+
+#####----------DATA CLEANING--------------------####
+# Clean the dataset by handling missing values: removing unnecessary columns and rows with missing data.
+
+sum(is.na(nycCrimeData))
+
+colSums(is.na(nycCrimeData)) 
+
+#table(nycCrimeData$HADEVELOPT)
+
+nyc_crime_drop = subset(nycCrimeData, select = -c(PARKS_NM,HADEVELOPT))
+
+
+
+nyc_crime_clean = na.omit(nyc_crime_drop)
+dim(nyc_crime_clean)
+```
+
+
+```{r}
+
+colSums(is.na(nyc_crime_clean))
+dim(nyc_crime_clean)
+
+```
+
+```{r}
+# Create a boxplot to visualize the distribution of X-coordinate values (longitude)
+# across different NYC boroughs. This helps in understanding the east-west spread
+# of crime incidents within each borough and detecting any spatial outliers.
+ggplot(data = nyc_crime_clean, mapping = aes(x = BORO_NM, y = X_COORD_CD)) + geom_boxplot(fill="springgreen1") + ggtitle("Box Plot of X_COORD_CD ") + theme_bw() + theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+```{r}
+
+# Generate a boxplot to visualize the distribution of Y-coordinate values (latitude)
+# across different NYC boroughs. This helps identify the spatial spread and outliers
+# in the north-south direction within each borough.
+ggplot(data = nyc_crime_clean, mapping = aes(x = BORO_NM, y = Y_COORD_CD)) + geom_boxplot(fill="springgreen1") + ggtitle("Box Plot of Y_COORD_CD ") + theme_bw() + theme(plot.title = element_text(hjust = 0.5))
+
+
+```
+
+
+
+```{r}
+
+# Create a hexbin density map of crime incidents in NYC,
+# using longitude and latitude to show spatial distribution.
+# Color intensity represents the (log-transformed) number of crimes in each hexbin.
+ggplot(nyc_crime_clean, aes(x = Longitude, y = Latitude)) +
+  stat_binhex(bins = 100) +
+  scale_fill_viridis_c(trans = "log", option = "D") +
+  coord_fixed() +
+  labs(title = "Crime Density Map (Hexbins)", x = "Longitude", y = "Latitude") +
+  theme_minimal()
+```
+
+
+
+
+
+```{r}
+#---------------------------------------------------------------
+# 2D Density Plot of Crime Occurrence with Red Shades
+#---------------------------------------------------------------
+# Remove rows with missing Latitude or Longitude
+nycCrimeData_clean <- nycCrimeData[!is.na(nycCrimeData$Latitude) & !is.na(nycCrimeData$Longitude), ]
+
+p_density <- ggplot(nycCrimeData_clean, aes(x = Longitude, y = Latitude)) +
+  stat_density2d(aes(fill = ..level..), geom = "polygon", contour = TRUE, alpha = 0.7) +
+  scale_fill_gradient(low = "#FFE5E5", high = "#990000") +  # light red to dark red
+  labs(title = "2D Density Plot of Crime Occurrence", x = "Longitude", y = "Latitude") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"))
+
+print(p_density)
+
+
+
+```
+
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# PHASE 2
+
+TRADITIONAL MACHINE LEARNING IN R
+
+
+Data Preparation
+----------------
+
+```{r}
+#Loading the data---------------------------------------------------------
+nycCrimeData = read.csv("/Users/swati/Downloads/NYPD_Complaint_Data_Current_YTD.csv")
+head(nycCrimeData)
+```
+
+Data Cleaning
+-------------
+
+```{r}
+# Cleaning the dataset by handling missing values: removing unnecessary columns and rows with missing data.
+
+#table(nycCrimeData$PARKS_NM)
+
+#table(nycCrimeData$HADEVELOPT)
+
+colSums(is.na(nycCrimeData))
+
+
+nyc_crime_drop = subset(nycCrimeData, select = -c(PARKS_NM,HADEVELOPT,Latitude,Longitude,Lat_Lon,ADDR_PCT_CD))
+
+nyc_crime_clean = na.omit(nyc_crime_drop)
+
+
+colSums(is.na(nyc_crime_clean))
+
+dim(nyc_crime_clean)
+
+crime_type <- c("LARCENY","ASSAULT","HARASSMENT,SUBD","THEFT","ADMINISTRATIVE CODE","HOMICIDE","INTOXICATED","LOITERING","OTHERSTATE LAW","OFFENSES","CRIMINAL MISCHIEF")
+crime_type
+for(i in 1:length(crime_type)){
+  nyc_crime_clean$PD_DESC[grep(crime_type[i],nyc_crime_clean$PD_DESC)] <- crime_type[i]
+  }
+
+nyc_crime_clean$PD_DESC[nyc_crime_clean$PD_DESC == "HARASSMENT,SUBD"] <- "HARASSMENT"
+
+#table(nycCrimeData$PD_DESC)
+
+```
+
+
+Feature Engineering and Train-Test split
+----------------------------------------
+
+
+```{r}
+
+#Feature Engineering and Train-Test split
+# Prepare and split the cleaned crime dataset into training and test sets, 
+# convert character variables to numeric, and generate summary statistics for precincts by borough.
+
+set.seed(43)
+
+str(nyc_crime_clean)
+
+nyc_crime_clean <- nyc_crime_clean %>% mutate_if(is.character, function(x) unclass(as.factor(x)))
+dim(nyc_crime_clean)
+
+index <- 1:ncol(nyc_crime_clean)
+index
+nyc_crime_clean[ , index] <- lapply(nyc_crime_clean[ , index], as.numeric)
+str(nyc_crime_clean)
+
+training_crime <- sample(1:nrow(nyc_crime_clean), nrow(nyc_crime_clean)*.70, replace = FALSE)
+#training_crime
+
+feature_names <- names(nyc_crime_clean)[1:18]
+feature_names
+
+
+train_set <- nyc_crime_clean[training_crime, c(feature_names)]
+#train_set
+getwd()
+dim(train_set)
+
+#table(train_set$BORO_NM) %>% prop.table()
+
+test_set <- nyc_crime_clean[-training_crime, c(feature_names)]
+#test_set
+
+dim(test_set)
+
+#table(test_set$BORO_NM) %>% prop.table()  
+
+
+
+boro_ranges <- aggregate(ADDR_PCT_CD ~ BORO_NM, data = nycCrimeData, 
+                         FUN = function(x) c(min = min(x, na.rm = TRUE), 
+                                             max = max(x, na.rm = TRUE)))
+
+# Convert the matrix output to a data frame
+boro_ranges <- do.call(data.frame, boro_ranges)
+
+# Rename columns for clarity
+names(boro_ranges) <- c("Borough", "Min_Precinct", "Max_Precinct")
+
+print(boro_ranges)
+
+```
+
+
+
+Logistic Regression
+-------------------------------------
+
+```{r}
+
+# This code performs a multinomial logistic regression on a dataset, predicts the class labels for both training and test sets, 
+# evaluates the model using confusion matrices, plots multiclass ROC curves, and computes the AUC, variance, and bias of the predictions.
+
+dim(test_set)
+dim(train_set)
+
+
+formula <- "BORO_NM ~ RPT_DT + KY_CD + PD_CD + CRM_ATPT_CPTD_CD + LAW_CAT_CD + X_COORD_CD + Y_COORD_CD"
+"RPT_DT" %in% names(train_set)
+
+multinom.model <- multinom(formula, data=train_set, MaxNWts =1000000)
+#head(your_dataframe$RPT_DT)  # See if it exists
+
+train.result <- predict(object=multinom.model, newdata=train_set,type="class")
+
+#train.result
+
+confusionMatrix(train.result, as.factor(train_set$BORO_NM))
+
+test.result <- predict(object=multinom.model, newdata=test_set, type="class")
+
+confusionMatrix(test.result, as.factor(test_set$BORO_NM))
+
+
+multiclass_roc_plot <- function(df, probs) { 
+     class.0.probs <- probs[,1]
+     class.1.probs <- probs[,2]
+     class.2.probs <- probs[,3]
+     class.3.probs <- probs[,4]
+     class.4.probs <- probs[,5]
+     
+     
+     actual.0.class <- as.integer(df$BORO_NM == 1)
+     actual.1.class <- as.integer(df$BORO_NM == 2)
+     actual.2.class <- as.integer(df$BORO_NM == 3)
+     actual.3.class <- as.integer(df$BORO_NM == 4)
+     actual.4.class <- as.integer(df$BORO_NM == 5)
+     
+     
+     
+     plot(x=NA, y=NA, xlim=c(0,1), ylim=c(0,1),
+          ylab='True Positive Rate',
+          xlab='False Positive Rate',
+          bty='n')
+     
+     legend(x = "right",                   
+            title = "Borough",
+            legend = c("BRONX", "BROOKLYN", "MANHATTAN", "QUEENS", "STATEN ISLAND"),
+            col = c(1, 2, 3, 4 ,5),      
+            lwd = 2)                       
+     
+     title("ROC Curve")
+     
+     pred.0 = prediction(class.0.probs, actual.0.class)
+     nbperf.0 = performance(pred.0, "tpr", "fpr")
+     
+     roc.x = unlist(nbperf.0@x.values)
+     roc.y = unlist(nbperf.0@y.values)
+     lines(roc.y ~ roc.x, col=0+1, lwd=2)
+     
+     
+     pred.1 = prediction(class.1.probs, actual.1.class)
+     nbperf.1 = performance(pred.1, "tpr", "fpr")
+     
+     roc.x = unlist(nbperf.1@x.values)
+     roc.y = unlist(nbperf.1@y.values)
+     lines(roc.y ~ roc.x, col=1+1, lwd=2)
+     
+     pred.2 = prediction(class.2.probs, actual.2.class)
+     nbperf.2 = performance(pred.2, "tpr", "fpr")
+     
+     roc.x = unlist(nbperf.2@x.values)      
+     roc.y = unlist(nbperf.2@y.values)
+     lines(roc.y ~ roc.x, col=2+1, lwd=2)
+     
+     pred.3 = prediction(class.3.probs, actual.3.class)
+     nbperf.3 = performance(pred.3, "tpr", "fpr")
+     
+     roc.x = unlist(nbperf.3@x.values)
+     roc.y = unlist(nbperf.3@y.values)
+     lines(roc.y ~ roc.x, col=3+1, lwd=2)
+     
+     pred.4 = prediction(class.4.probs, actual.4.class)
+     nbperf.4 = performance(pred.4, "tpr", "fpr")
+     
+     roc.x = unlist(nbperf.4@x.values)
+     roc.y = unlist(nbperf.4@y.values)
+     lines(roc.y ~ roc.x, col=4+1, lwd=2)
+     
+    
+     
+     lines(x=c(0,1), c(0,1))
+     
+ }
+
+test.result.probs <- predict(multinom.model, test_set, type='probs')
+
+roc.multi <- multiclass.roc(test_set$BORO_NM,test.result.probs)
+auc(roc.multi)
+
+multiclass_roc_plot(test_set,test.result.probs)
+
+var(as.numeric(test.result), as.numeric(test_set$BORO_NM))
+
+bias(as.numeric(test.result), as.numeric(test_set$BORO_NM))
+
+```
+
+
+                  Nearest Neighbour
+--------------------------------------------------------------------------
+
+```{r}
+# This code applies the k-Nearest Neighbors (KNN) algorithm with different values of k (3, 5, and 11) to classify the test dataset,
+# evaluates model performance using confusion matrices, and calculates the variance and bias of the predictions.
+
+train_knn <- train_set
+test_knn <- test_set
+
+str(train_knn)
+
+#train_knn
+
+knn.model <- knn(train_knn, test_knn, cl = train_knn$BORO_NM, k = 3)
+
+confusionMatrix(knn.model, as.factor(test_knn$BORO_NM))
+
+knn.model <- knn(train_knn, test_knn, cl = train_knn$BORO_NM, k = 5)
+
+confusionMatrix(knn.model, as.factor(test_knn$BORO_NM))
+
+knn.model <- knn(train_knn, test_knn, cl = train_knn$BORO_NM, k = 11)
+
+confusionMatrix(knn.model, as.factor(test_knn$BORO_NM))
+
+var(as.numeric(knn.model), as.numeric(test_knn$BORO_NM))
+
+bias(as.numeric(knn.model), as.numeric(test_knn$BORO_NM))
+
+
+
+```
+
+```{r}
+library(class)
+library(caret)
+library(ggplot2)
+
+train_knn <- train_set
+test_knn <- test_set
+
+k_values <- c(3, 5, 11)
+accuracies <- numeric(length(k_values))
+
+for (i in 1:length(k_values)) {
+  k <- k_values[i]
+  pred <- knn(train = train_knn[, -which(names(train_knn) == "BORO_NM")],
+              test = test_knn[, -which(names(test_knn) == "BORO_NM")],
+              cl = train_knn$BORO_NM, k = k)
+  
+  cm <- confusionMatrix(pred, as.factor(test_knn$BORO_NM))
+  accuracies[i] <- cm$overall['Accuracy']
+}
+
+# Create a data frame for plotting
+results_df <- data.frame(k = k_values, Accuracy = accuracies)
+
+# Plotting
+ggplot(results_df, aes(x = k, y = Accuracy)) +
+  geom_line(color = "blue") +
+  geom_point(size = 3, color = "red") +
+  labs(title = "k-NN Model Accuracy vs. k",
+       x = "Number of Neighbors (k)",
+       y = "Accuracy") +
+  theme_minimal()
+
+```
+
+          Decision Tree
+----------------------------------------------------------------------
+
+```{r}
+
+
+# This code builds a decision tree model using the rpart function, evaluates its performance on both the training and test sets with confusion matrices,
+# plots the decision tree, and calculates model metrics such as variance, bias, AUC, and multiclass ROC curves.
+
+
+dim(train_set)
+dim(test_set)
+
+
+# Check if target accidentally exists in predictors
+dim(train_set)
+
+#model_dt <- rpart(BORO_NM ~ ., data = train_set,method='class')
+
+model_dt <- rpart(BORO_NM~., data=train_set, method = "class", parms=list(split=c("information","gini")),cp = 0.01, minsplit=20, minbucket=7, maxdepth=5)
+
+
+rpart.plot(model_dt)
+
+tr_predict_dt <- predict(object = model_dt, newdata = train_set, type="class")
+
+#tr_predict_dt
+
+confusionMatrix(tr_predict_dt, as.factor(train_set$BORO_NM))
+
+tst_predict_dt <- predict(object = model_dt, newdata = test_set, type="class")
+
+confusionMatrix(tst_predict_dt, as.factor(test_set$BORO_NM))
+
+test.dtree.probs <- predict(model_dt,test_set, type="prob")
+
+auc(roc.multi)
+
+plotcp(model_dt)
+
+var(as.numeric(tst_predict_dt), unclass(as.factor(test_set$BORO_NM)))
+
+bias(as.numeric(tst_predict_dt), as.vector(unclass(as.factor(test_set$BORO_NM)),'numeric'))
+
+multiclass_roc_plot(test_set, test.dtree.probs)
+
+
+```
+
+
+
+ Support Vector Machines(SVM)
+---------------------------------------------------------
+
+```{r}
+
+
+dim(train_set)
+# Reducing the dataset to 62,000 rows (keeping all columns as it is taking more than 3 hours  for the larger dataset. )
+reduced_train_set_trial1 <- train_set[1:62000, ]
+dim(reduced_train_set_trial1)
+
+svmfit <- svm(BORO_NM~., data = reduced_train_set_trial1 , kernel = "radial", probability = TRUE)
+
+
+pred.svm.train <- predict(svmfit, reduced_train_set_trial1 ,type="class")
+#pred.svm.train
+pred.svm.train <- round(pred.svm.train,digits=0)
+#pred.svm.train
+pred.svm.train[pred.svm.train == 0] <- 1
+#pred.svm.train
+
+common_levels_train <- levels(factor(reduced_train_set_trial1$BORO_NM))
+predicted_train <- factor(pred.svm.train, levels = common_levels_train)
+actual_train <- factor(reduced_train_set_trial1$BORO_NM, levels = common_levels_train)
+# Confusion matrix
+confusionMatrix(predicted_train, actual_train)
+
+#confusionMatrix(as.factor(pred.svm.train), as.factor(reduced_train_set_trial1$BORO_NM))
+
+
+#-----------------------------------------------------------------------------------------
+
+
+dim(test_set)
+reduced_test_set_trial1 <- test_set[1:18600, ]
+dim(reduced_test_set_trial1)
+pred.svm.test <- predict(svmfit, reduced_test_set_trial1)
+pred.svm.test <- round(pred.svm.test, digits = 0)
+
+
+common_levels_test <- levels(factor(reduced_test_set_trial1$BORO_NM))
+predicted_test <- factor(pred.svm.test, levels = common_levels_test)
+actual_test <- factor(reduced_test_set_trial1$BORO_NM, levels = common_levels_test)
+confusionMatrix(predicted_test, actual_test)
+
+test.svm.probs <- predict(svmfit,reduced_test_set_trial1, probability = TRUE)
+common_levels_test <- levels(factor(reduced_test_set_trial1$BORO_NM))
+predicted <- factor(test.svm.probs, levels = common_levels_test)
+actual <- factor(reduced_test_set_trial1$BORO_NM, levels = common_levels_test)
+
+roc <- multiclass.roc(reduced_test_set_trial1$BORO_NM, pred.svm.test, plot=TRUE,col="turquoise2",lwd = 4,print.auc.y=0.4,legacy.axes=TRUE)
+legend("bottomright",legend=c("SVM"),col=c("turquoise2"),lwd=4)
+
+roc.multi <- multiclass.roc(reduced_test_set_trial1$BORO_NM, test.svm.probs)
+
+roc.multi
+
+auc(roc.multi)
+
+var(as.numeric(pred.svm.test), as.numeric(reduced_test_set_trial1$BORO_NM))
+
+bias(as.numeric(pred.svm.test), as.numeric(reduced_test_set_trial1$BORO_NM))
+
+```
+
+
+
+ Random Forest(RF)
+---------------------------------------------------------
+
+
+```{r}
+
+# This code trains a random forest classifier on the training dataset, evaluates feature importance, predicts on both training and test sets,
+# and assesses model performance using confusion matrices, variance, and bias calculations.
+
+dim(train_set)
+dim(test_set)
+
+model_rf <- randomForest(as.factor(BORO_NM) ~ ., ntree = 3 , importance = TRUE, data = train_set, tuneGrid = data.frame(mtry = 3),trControl = trainControl(method = "cv", number = 2, allowParallel = TRUE))
+
+importance(model_rf)
+
+rf_train <- predict(model_rf, train_set)
+
+#rf_train
+
+confusionMatrix(rf_train, as.factor(train_set$BORO_NM))
+
+rf_test <- predict(model_rf, test_set)
+
+#rf_test
+
+confusionMatrix(rf_test, as.factor(test_set$BORO_NM))
+
+var(as.numeric(rf_test), as.numeric(test_set$BORO_NM))
+
+bias(as.numeric(rf_test), as.numeric(test_set$BORO_NM))
+
+
+```
+
+
